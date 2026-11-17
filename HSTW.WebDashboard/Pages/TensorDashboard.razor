@@ -1,0 +1,208 @@
+﻿@page "/tensor-dashboard"
+@using HSTW.WebDashboard.Services
+@using Microsoft.JSInterop
+@inject TensorEngineService Engine
+@inject IJSRuntime JS
+
+<div class="container-fluid py-4">
+    <h2 class="mb-3">Panel de Control Holográfico - HSTW V1.0</h2>
+    <p class="text-muted">Monitoreo en tiempo real del flujo de datos tensoriales multidimensionales procesados por el núcleo nativo de C++.</p>
+
+    <div class="row mt-4">
+        <!-- COLUMNA IZQUIERDA: CONTROLES E HISTORIAL -->
+        <div class="col-md-5">
+            <div class="card p-4 shadow-sm mb-4">
+                <h4>Estado Actual del Hipercubo</h4>
+                <div class="alert alert-success fs-5 my-3">
+                    <strong>Energía Marginal:</strong> @currentEnergy.ToString("N4")
+                </div>
+
+                <div class="d-grid gap-2">
+                    <button class="btn btn-primary" @onclick="RunSimulationStep">Ejecutar Paso de Simulación O(1)</button>
+                    <button class="btn btn-secondary" @onclick="ResetTensor">Reiniciar Tensor</button>
+                </div>
+            </div>
+
+            <div class="card p-4 shadow-sm">
+                <h5>Historial de Eventos</h5>
+                <ul class="list-group mt-3" style="max-height: 220px; overflow-y: auto;">
+                    @foreach (var log in logs)
+                    {
+                        <li class="list-group-item small">@log</li>
+                    }
+                </ul>
+            </div>
+        </div>
+
+        <!-- COLUMNA DERECHA: GRÁFICA EN VIVO -->
+        <div class="col-md-7">
+            <div class="card p-4 shadow-sm h-100">
+                <h4 class="mb-3">Comportamiento Dinámico del Flujo Energético</h4>
+                <p class="text-muted small">Evolución en tiempo real del vector de energía marginal por iteración computada en O(1).</p>
+
+                <!-- Contenedor estricto para asegurar renderizado correcto del Canvas -->
+                <div style="width: 100%; height: 350px; position: relative;">
+                    <canvas id="energyChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SECCIÓN DE AYUDA Y DOCUMENTACIÓN TÉCNICA INTEGRADA -->
+    <div class="row mt-5">
+        <div class="col-12">
+            <div class="card p-4 shadow-sm border-primary">
+                <h3 class="text-primary mb-3">📖 Documentación Técnica: Holographic Sliding Tensor Window (HSTW)</h3>
+                <hr />
+                <div class="row">
+                    <div class="col-md-6">
+                        <h5 class="fw-bold mt-2">1. ¿Qué es este sistema?</h5>
+                        <p class="small text-muted">HSTW es una arquitectura híbrida de alto rendimiento compuesta por un motor nativo en C++ (compilado como DLL de acceso ultrarrápido) acoplado a una interfaz web moderna construida en .NET 8 / Blazor.</p>
+
+                        <h5 class="fw-bold mt-3">2. ¿Qué hace y cómo lo hace?</h5>
+                        <p class="small text-muted">Gestiona y procesa una estructura de datos tridimensional (un tensor o hipercubo) aplicando una <em>Ventana Deslizante Holográfica</em>. En lugar de recalcular toda la matriz masivamente ante cada cambio, desplaza particiones de memoria en tiempo constante <strong>O(1)</strong>, comunicándose con C# mediante punteros nativos en memoria a través de interoperabilidad C-interface.</p>
+
+                        <h5 class="fw-bold mt-3">3. ¿Por qué y para qué se hace de esta manera?</h5>
+                        <p class="small text-muted"><strong>Por qué:</strong> Los lenguajes administrados manejan recolectores de basura que introducen latencias. C++ ofrece control directo de hardware y RAM a nivel de punteros.<br /><strong>Para qué:</strong> Para procesar flujos masivos de datos multidimensionales en tiempo real sin sobrecargar el procesador.</p>
+                    </div>
+                    <div class="col-md-6">
+                        <h5 class="fw-bold mt-2">4. ¿Qué problema soluciona o resuelve?</h5>
+                        <p class="small text-muted">Resuelve el cuello de botella computacional clásico en el análisis de series temporales multidimensionales y simulaciones energéticas, permitiendo realizar consultas y actualizaciones incrementales instantáneas sin re-escanear todo el conjunto de datos.</p>
+
+                        <h5 class="fw-bold mt-3">5. Conceptos Generales Clave</h5>
+                        <ul class="small text-muted">
+                            <li><strong>Tensor Tridimensional:</strong> Estructura matricial de orden 3 ($X \times Y \times Z$) que almacena estados discretos.</li>
+                            <li><strong>Complejidad O(1):</strong> El tiempo de ejecución del desplazamiento es independiente del tamaño total del tensor.</li>
+                            <li><strong>Arquitectura Interop:</strong> Puente seguro de bajo nivel entre código nativo compilado (DLL) y entornos web administrados (.NET).</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Importar la librería Chart.js desde CDN -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+    window.tensorChartFunctions = {
+        chartInstance: null,
+        initChart: function (initialLabel, initialValue) {
+            const canvasEl = document.getElementById('energyChart');
+            if (!canvasEl) return;
+            const ctx = canvasEl.getContext('2d');
+            if (this.chartInstance) {
+                this.chartInstance.destroy();
+            }
+            this.chartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [initialLabel],
+                    datasets: [{
+                        label: 'Energía Marginal del Tensor',
+                        data: [initialValue],
+                        borderColor: 'rgb(13, 110, 253)',
+                        backgroundColor: 'rgba(13, 110, 253, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { beginAtZero: false }
+                    }
+                }
+            });
+        },
+        updateChart: function (label, value) {
+            if (this.chartInstance) {
+                this.chartInstance.data.labels.push(label);
+                this.chartInstance.data.datasets[0].data.push(value);
+                if (this.chartInstance.data.labels.length > 15) {
+                    this.chartInstance.data.labels.shift();
+                    this.chartInstance.data.datasets[0].data.shift();
+                }
+                this.chartInstance.update();
+            }
+        }
+    };
+</script>
+
+@code {
+    private double currentEnergy;
+    private List<string> logs = new();
+    private Random rand = new();
+    private int stepCounter = 1;
+
+    protected override void OnInitialized()
+    {
+        GenerarTensorInicial();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                Console.WriteLine("HSTW: OnAfterRenderAsync ejecutado.");
+                Console.WriteLine($"HSTW: firstRender = {firstRender}");
+                Console.WriteLine("HSTW: intentando inicializar gráfica.");
+
+
+                await JS.InvokeVoidAsync(
+                    "tensorChartFunctions.initChart",
+                    $"Paso {stepCounter}",
+                    currentEnergy
+                );
+
+            Console.WriteLine("HSTW: gráfica inicializada correctamente.");
+
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Error al inicializar gráfica: " + ex.Message);
+            }
+        }
+    }
+
+    private void GenerarTensorInicial()
+    {
+        stepCounter = 1;
+        double[] initialData = new double[27];
+        for (int i = 0; i < initialData.Length; i++) initialData[i] = rand.NextDouble() * 10;
+
+        Engine.InitializeTensor(initialData);
+        currentEnergy = Engine.GetCurrentEnergy();
+        logs.Clear();
+        logs.Add($"[Inicio] Tensor inicializado. Energía: {currentEnergy:N4}");
+    }
+
+    private async Task RunSimulationStep()
+    {
+        Console.WriteLine("HSTW: se ejecutó RunSimulationStep.");
+
+        stepCounter++;
+        double[] slice = new double[9];
+        for (int i = 0; i < slice.Length; i++) slice[i] = rand.NextDouble() * 15;
+
+        currentEnergy = Engine.SlideTensor(slice, 0);
+        logs.Insert(0, $"[Simulación] Capa deslizada en O(1). Nueva Energía: {currentEnergy:N4}");
+
+        if (logs.Count > 10) logs.RemoveAt(logs.Count - 1);
+
+        await JS.InvokeVoidAsync("tensorChartFunctions.updateChart", $"Paso {stepCounter}", currentEnergy);
+    }
+
+    private async Task ResetTensor()
+    {
+        GenerarTensorInicial();
+        StateHasChanged();
+        await Task.Delay(100);
+        await JS.InvokeVoidAsync("tensorChartFunctions.initChart", $"Paso {stepCounter}", currentEnergy);
+    }
+}
